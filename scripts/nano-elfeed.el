@@ -64,10 +64,10 @@
                       'display (list (list 'slice 0  0 icon-width ch) thumbnail)
                       'line-height nil)
           (propertize (make-string char-width ?-)
-                      'display (list (list 'slice 0  ch icon-width ch) thumbnail)
+                      'display (list (list 'slice 0  (- ch 1) icon-width ch) thumbnail)
                       'line-height nil))))
 
-(defvar nano-elfeed-icon-path "~/.config/aurora-emacs/icons")
+(defvar nano-elfeed-icon-path (concat nox/emacs-directory "icons"))
 
 (defun nano-elfeed-make-icon (name)
   (let* ((image-unread (create-image (format "%s/%s-unread.svg" nano-elfeed-icon-path name)))
@@ -111,23 +111,22 @@
          (foreground-color (if unread
                                (face-foreground 'default)
                              (face-foreground 'font-lock-comment-face nil t)))
-         (background-color (face-background 'highlight))
+         (background-color (face-background 'default))
          (border-color     (face-background 'default))
          (face-upper    `(:foreground ,foreground-color
                                       :background ,background-color
                                       :overline ,border-color))
          (face-title    `(:foreground ,foreground-color
+                                      :inherit 'variable-pitch
                                       :background ,background-color
-                                      :weight ,(face-attribute 'bold :weight)
+                                      :weight bold
                                       :overline ,border-color))
          (face-subtitle `(:foreground ,foreground-color
                                       :background ,background-color
-                                      :family "Inter"
+                                      :inherit 'variable-pitch
                                       :height 120
+                                      :weight light
                                       :underline nil
-                                      ;;                                     (:color ,border-color
-                                      ;;                                      :style line
-                                      ;;                                      :position t)
                                       ))
          (face-lower    `(:foreground ,foreground-color
                                       :background ,background-color

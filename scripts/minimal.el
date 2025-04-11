@@ -1,15 +1,16 @@
 ;;; minimal.el --- Minimal -*- no-byte-compile: t; lexical-binding: t; -*-
+;;; Commentary:
+;;; adapted from minimal-emacs.d
 
+;;; Code:
 ;;; Networking
 
 ;; Don't ping things that look like domain names.
 (setq ffap-machine-p-known 'reject)
 
 ;; Ensure use-package is available at compile time
-(eval-when-compile
-  (require 'use-package))
-
-;; Ensure the 'use-package' package is installed and loaded
+;; (eval-when-compile
+;;   (require 'use-package))
 
 ;;; Features, warnings, and errors
 
@@ -301,3 +302,4 @@
       ediff-split-window-function #'split-window-horizontally)
 
 (provide 'minimal)
+;;; minimal.el ends here

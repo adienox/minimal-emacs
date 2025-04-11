@@ -16,7 +16,6 @@
 (setq default-input-method nil)
 
 ;;; Performance
-
 ;; Prefer loading newer compiled files
 (setq load-prefer-newer t)
 

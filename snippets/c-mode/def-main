@@ -1,0 +1,12 @@
+# -*- mode: snippet -*-
+# name: def main
+# key: <m
+# --
+
+#include <stdio.h>
+
+int main() {
+    $0
+
+    return 0;
+}

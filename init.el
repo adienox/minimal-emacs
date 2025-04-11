@@ -1,7 +1,9 @@
 ;;; init.el --- Init -*- no-byte-compile: t; lexical-binding: t; -*-
 
-(defconst nox/emacs-directory (concat (getenv "HOME") "/.config/aurora-emacs/" ))
-(defconst nox/notes-directory (concat (getenv "HOME") "/Documents/Zettels/"))
+(defconst nox/emacs-directory (concat (getenv "XDG_CONFIG_HOME") "/minimal-emacs/" ))
+(defconst nox/notes-directory (concat (getenv "HOME") "/Documents/nexus/"))
+(defconst nox/tasks-directory (concat (getenv "HOME") "/Documents/tasks/"))
+(defconst nox/schedule-file (concat nox/tasks-directory "schedule.org"))
 
 ;;; init.el --- file for init -*- no-byte-compile: t; lexical-binding: t; -*-
 
@@ -14,29 +16,23 @@
                     (time-subtract after-init-time before-init-time)))
            gcs-done))
 
-(defconst nox/emacs-directory (concat (getenv "HOME") "/.config/minimal-emacs/" ))
-(defconst nox/notes-directory (concat (getenv "HOME") "/Documents/Zettels/"))
-
 (add-to-list 'load-path (concat nox/emacs-directory "scripts/"))
 
-;; setting the core date by searching from hydra for nixos
-(setq elpaca-core-date '(20241224))
+;; Specify the custom file path and load the custom file quietly
+(setq custom-file (concat nox/emacs-directory "custom-vars.el"))
+(load custom-file 'noerror 'nomessage)
+
 (require 'elpaca-setup)   ;; Elpaca Package Manager
 (require 'on)             ;; Doom Style Hooks
 (require 'minimal)        ;; emacs config from minimal-emacs.d
 (require 'link-converter) ;; md <=> converter
 
-;; Specify the custom file path
-(setq custom-file (concat nox/emacs-directory "custom-vars.el"))
-
-;; Load the custom file quietly
-(add-hook 'elpaca-after-init-hook
-          (lambda () (load custom-file 'noerror 'nomessage)))
-
-(use-package benchmark-init
-  :ensure t
-  :config
-  (add-hook 'after-init-hook 'benchmark-init/deactivate))
+(defun nox/get-secret (path)
+  "Retrieve the secret from the specified PATH within the SOPS-Nix configuration."
+  (nth 0 (process-lines "cat"
+                        (concat
+                         (getenv "XDG_CONFIG_HOME")
+                         "/sops-nix/secrets/" path))))
 
 (use-package evil
   :custom
@@ -56,17 +52,19 @@
 
 (evil-define-key 'normal 'global
   (kbd "C-S-v") 'cua-set-mark
-  (kbd "C-o") 'casual-editkit-main-tmenu
   "s" 'evil-avy-goto-char-timer)
 
 (evil-define-key '(normal visual) 'global
   "P" 'consult-yank-from-kill-ring
   "H" 'evil-first-non-blank
+  "?" 'gptel-quick
   "L" 'evil-end-of-line)
 
 (evil-define-key 'normal org-mode-map
   "J" 'org-shiftright
   "K" 'org-shiftleft)
+
+(unbind-key "C-e" evil-insert-state-map)
 
 (evil-define-key 'normal elfeed-search-mode-map
   "l" 'elfeed-search-show-entry))
@@ -76,7 +74,15 @@
   :config
   (evil-collection-init)
   :custom
+  (evil-collection-calendar-want-org-bindings t)
   (evil-collection-want-find-usages-bindings t))
+
+(use-package evil-org
+  :after org
+  :hook (org-mode . (lambda () evil-org-mode))
+  :config
+  (require 'evil-org-agenda)
+  (evil-org-agenda-set-keys))
 
 ;; Make ESC quit prompts
 (global-set-key (kbd "<escape>") 'keyboard-escape-quit)
@@ -92,8 +98,11 @@
 
 (nox/leader-keys
   "a" '(:ignore t :wk "[A]pplications")
+  "a c" '(calendar :wk "[C]alendar")
+  "a C" '(calibredb :wk "[C]alibre")
   "a e" '(elfeed :wk "[E]lfeed")
   "a g" '(gptel :wk "[G]ptel")
+  "a w" '(wombag :wk "[W]ombag")
   "a m" '(mu4e :wk "[M]ail"))
 
 (nox/leader-keys
@@ -109,7 +118,7 @@
 (nox/leader-keys
   "d" '(:ignore t :wk "[D]ired")
   "d ." '(dired-omit-mode :wk "Toggle dot files")
-  "d d" '(dired-jump :wk "[D]ired")
+  "d d" '(dirvish :wk "[D]irvish")
   "d h" '(dired-hide-details-mode :wk "[D]ired")
   "d p" '(peep-dired :wk "[P]eep Dired"))
 
@@ -124,8 +133,11 @@
 (nox/leader-keys
   "f" '(:ignore t :wk "[F]ile")
   "f c" `((lambda () (interactive) (find-file ,(concat nox/emacs-directory "config.org")))
-          :wk "Edit emacs config")
+          :wk "[C]onfig File")
+  "f t" `((lambda () (interactive) (find-file nox/schedule-file)) :wk "[T]asks File")
   "f s" '(save-buffer :wk "[S]ave Buffer")
+  "f d" '(bufferfile-delete :wk "[D]elete File")
+  "f r" '(bufferfile-rename :wk "[R]ename File")
   "f u" '(sudo-edit-find-file :wk "S[U]do Find File")
   "f U" '(sudo-edit :wk "S[U]do Edit File"))
 
@@ -137,29 +149,23 @@
 (nox/leader-keys
   "o" '(:ignore t :wk "[O]rg")
   "o a" '(org-agenda :wk "[A]genda")
-  "o e" '(org-edit-src-code :wk "[E]dit Src Code")
+  "o c" '(org-capture :wk "[C]apture")
   "o x" '(org-toggle-checkbox :wk "[C]heckbox")
-  "o l" '(org-store-link :wk "[L]ink Store")
+  "o L" '(org-store-link :wk "[L]ink Store")
   "o b" '(:ignore t :wk "[B]abel")
   "o b t" '(org-babel-tangle :wk "[T]angle")
   "o b d" '(org-babel-demarcate-block :wk "[D]emarcate Block"))
 
 (nox/leader-keys
   "o p" '(:ignore t :wk "[P]roperties")
-  "o p s" '(org-schedule :wk "[S]chedule")
-  "o p d" '(org-deadline :wk "[D]eadline")
   "o p e" '(org-set-effort :wk "[E]ffort")
-  "o p t" '(nox/org-toggle-properties :wk "[T]oggle Properties")
-  "o p p" '(org-set-effort :wk "[P]roperty"))
+  "o p t" '(nox/org-toggle-properties :wk "[T]oggle Properties"))
 
 (nox/leader-keys
-  "o i" '(org-roam-node-insert :wk "[I]nsert Link")
-  "o c" '((lambda () (interactive) (org-roam-capture nil "d")) :wk "[C]apture")
-  "o C" '(org-roam-capture :wk "[C]apture with Templates")
-  "o f" '(org-roam-node-find :wk "[F]ind Node")
-  "o t" '(nox/org-roam-capture-tasks :wk "[T]ask Capture")
-  "o d" '((lambda () (interactive) (org-roam-dailies-capture-today nil "d")) :wk "[D]aily Capture")
-  "o D" '(org-roam-dailies-capture-today :wk "[D]aily Open"))
+  "o g" '(consult-denote-grep :wk "[G]rep in Denote")
+  "o l" '(denote-link :wk "[L]ink Denote Note")
+  "o r" '(denote-explore-random-note :wk "[R]andom Note")
+  "o f" '(consult-denote-find :wk "[F]ind in Denote"))
 
 (nox/leader-keys
   "q" '(:ignore t :wk "[Q]uit")
@@ -178,11 +184,11 @@
 
 (nox/leader-keys
   "t" '(:ignore t :wk "[T]oggle")
-  "t e" '(eshell-toggle :wk "[E]shell")
+  "t e" '(eshell :wk "[E]shell")
   "t l" '(elpaca-log :wk "[L]og Elpaca")
-  "t t" '(modus-themes-toggle :wk "[T]oggle Theme")
+  "t t" '(nox/toggle-catppuccin :wk "[T]oggle Theme")
   "t c" '(visual-fill-column-mode :wk "[C]olumn Fill Mode")
-  "t v" '(vterm-toggle :wk "[V]term")
+  "t v" '(vterm :wk "[V]term")
   "t n" '(display-line-numbers-mode :wk "[N]umbered Lines")
   "t s" '(hydra-text-scale/body :wk "[S]cale Text"))
 
@@ -190,8 +196,8 @@
   "." '(find-file :wk "Find File")
 ))
 
+(use-package nerd-icons)
 (use-package all-the-icons)
-(use-package nerd-icons :defer 2)
 
 (use-package doom-modeline
   :hook
@@ -207,8 +213,11 @@
 
 (use-package emacs
   :ensure nil
+  :bind*
+  (("C-?" . dictionary-lookup-definition))
   :hook
   (prog-mode . display-line-numbers-mode)
+  (calendar-today-visible . calendar-mark-today)
   :init
   (electric-indent-mode -1)    ;; Disable weird emacs indenting
   (indent-tabs-mode -1)        ;; Disable the use of tabs for indentation
@@ -219,21 +228,18 @@
   (display-battery-mode 1)     ;; Enable displaying battery info in modline
   (winner-mode 1)              ;; Easily undo window configuration changes.
   :custom
+  (dictionary-server "dict.org")        ;; set dictionary server
   (delete-selection-mode 1)             ;; Replacing selected text with typed text.
   (global-visual-line-mode 1)           ;; Better text wrapping
   (display-line-numbers-type 'relative) ;; Use relative line numbering
   (history-length 25)                   ;; Set the length of the command history.
   (ispell-dictionary "en_US")           ;; Default dictionary for spell checking.
-  (pixel-scroll-precision-mode t)       ;; Enable precise pixel scrolling.
   (ring-bell-function 'ignore)          ;; Disable the audible bell.
   (tab-width 4)                         ;; Set the tab width to 4 spaces.
   (use-dialog-box nil)                  ;; Disable dialog boxes
   (warning-minimum-level :error)        ;; Set the minimum level of warnings.
   (show-paren-context-when-offscreen t) ;; Show context of parens when offscreen
-  (pixel-scroll-precision-use-momentum nil) ;; Disable momentum scrolling
 
-  ;; Don't jump the cursor around when scrolling
-  (scroll-conservatively 101)
   ;; TAB key complete, instead of just indenting.
   (tab-always-indent 'complete)
   ;; Use advanced font locking for Treesit mode.
@@ -244,6 +250,11 @@
   (split-width-threshold 300)
   :config
   (add-hook 'before-save-hook 'delete-trailing-whitespace)
+  (setq holiday-christian-holidays nil
+        holiday-hebrew-holidays nil
+        holiday-islamic-holidays nil
+        holiday-bahai-holidays nil
+        holiday-solar-holidays nil)
   (setq-default indent-tabs-mode nil))
 
 (use-package woman
@@ -272,15 +283,17 @@
       auto-revert-verbose t)
 
 ;; setting the backup dir to trash.
+(let ((trash-dir (getenv "XDG_DATA_HOME")))
+  (unless (and trash-dir (file-directory-p trash-dir))
+    (setq trash-dir (expand-file-name "~/.local/share"))) ;; default fallback
+  (setq backup-directory-alist `(("." . ,(concat trash-dir "/Trash/files")))))
 
-(setq backup-directory-alist '(("." .
-                                  (concat (getenv "XDG_DATA_HOME") "/Trash/files")))
-        make-backup-files t     ; backup of a file the first time it is saved.
-        backup-by-copying t     ; don't clobber symlinks
-        version-control t       ; version numbers for backup files
-        delete-old-versions t   ; delete excess backup files silently
-        kept-old-versions 6     ; oldest versions to keep when a new numbered
-        kept-new-versions 9)    ; newest versions to keep when a new numbered
+(setq make-backup-files t     ; backup of a file the first time it is saved.
+      backup-by-copying t     ; don't clobber symlinks
+      version-control t       ; version numbers for backup files
+      delete-old-versions t   ; delete excess backup files silently
+      kept-old-versions 6     ; oldest versions to keep when a new numbered
+      kept-new-versions 9)    ; newest versions to keep when a new numbered
 
 (save-place-mode 1)
 (setq save-place-file (expand-file-name "saveplace" user-emacs-directory))
@@ -321,53 +334,76 @@
 (setq recentf-max-saved-items 300) ; default is 20
 (setq recentf-auto-cleanup 'mode)
 
-(use-package modus-themes
+(run-with-timer 60 (* 30 60) 'recentf-save-list)
+
+(use-package catppuccin-theme
+  :custom
+  (catppuccin-highlight-matches t)
+  (catppuccin-italic-comments t)
+  (catppuccin-italic-variables t)
   :config
-  (setq modus-themes-italic-constructs t
-        modus-themes-bold-constructs t
-        modus-themes-mixed-fonts t
-
-        ;; Options for `modus-themes-prompts' are either nil (the
-        ;; default), or a list of properties that may include any of those
-        ;; symbols: `italic', `WEIGHT'
-        modus-themes-prompts '(italic bold)
-
-        ;; The `modus-themes-completions' is an alist that reads two
-        ;; keys: `matches', `selection'.  Each accepts a nil value (or
-        ;; empty list) or a list of properties that can include any of
-        ;; the following (for WEIGHT read further below):
-        ;;
-        ;; `matches'   :: `underline', `italic', `WEIGHT'
-        ;; `selection' :: `underline', `italic', `WEIGHT'
-        modus-themes-completions
-        '((matches . (extrabold))
-          (selection . (semibold italic text-also)))
-
-        ;; Remove the border
-        ;; Make the fringe invisible
-        modus-themes-common-palette-overrides
-        '((border-mode-line-active unspecified)
-          (border-mode-line-inactive unspecified)
-          (fringe unspecified))
-
-        modus-themes-to-toggle
-        '(modus-operandi-tinted modus-vivendi-tinted)
-
-        modus-themes-headings
-        '((1 . (variable-pitch 1.5))
-          (2 . (1.3))
-          (3 . (1.1))
-          (agenda-date . (1.3))
-          (agenda-structure . (variable-pitch light 1.8))
-          (t . (1.1))))
-
-  (load-theme 'modus-vivendi-tinted t))
+  (catppuccin-set-color 'base "#000000" 'mocha)
+  (catppuccin-set-color 'mantle "#090909" 'mocha)
+  (catppuccin-set-color 'crust "#181825" 'mocha)
+  (catppuccin-set-color 'base "#FBF7F0" 'latte)
+  (catppuccin-set-color 'mantle "#EFE9DD" 'latte)
+  (catppuccin-set-color 'crust "#C9B9B0" 'latte)
+  (load-theme 'catppuccin t)
+  (nox/change-colors))
 
 ;; adding padding to ui elements to make doing tasks feel more comfortable
 (use-package spacious-padding
-  :after modus-themes
+  :after catppuccin-theme
   :config
-  (spacious-padding-mode))
+  (setq spacious-padding-widths
+        '( :internal-border-width 15
+           :header-line-width 0
+           :mode-line-width 0
+           :tab-width 4
+           :right-divider-width 0
+           :scroll-bar-width 8
+           :fringe-width 8))
+  (if (daemonp)
+      (add-hook 'server-after-make-frame-hook #'spacious-padding-mode)
+    (spacious-padding-mode)))
+
+;; Transparency
+(add-to-list 'default-frame-alist '(alpha-background . 80))
+
+(defun nox/change-colors ()
+  "Change colors throughout."
+  (interactive)
+
+  (set-face-attribute 'highlight nil :foreground 'unspecified)
+
+    (set-face-attribute 'calendar-today nil
+                        :underline 'unspecified
+                        :foreground (catppuccin-get-color 'green))
+
+    (set-face-attribute 'holiday nil
+                        :background 'unspecified
+                        :foreground (catppuccin-get-color 'red))
+
+  (set-face-attribute 'mode-line-active nil :inherit 'mode-line)
+  (with-eval-after-load 'diff-hl
+    (set-face-attribute 'diff-hl-change nil
+                        :foreground (catppuccin-get-color 'yellow)
+                        :background (catppuccin-get-color 'base))
+    (set-face-attribute 'diff-hl-delete nil
+                        :foreground (catppuccin-get-color 'red)
+                        :background (catppuccin-get-color 'base))
+    (set-face-attribute 'diff-hl-insert nil
+                        :foreground (catppuccin-get-color 'green)
+                        :background (catppuccin-get-color 'base))))
+
+(defun nox/toggle-catppuccin ()
+  "Toggle the catppuccin theme between latte and mocha."
+  (interactive)
+  (let ((current-flavor catppuccin-flavor))
+    (setq catppuccin-flavor (if (equal current-flavor 'latte) 'mocha 'latte))
+    (catppuccin-reload)
+    (nox/change-colors)
+    (nox/org-font-setup)))
 
 (use-package which-key
   :config (which-key-mode)
@@ -387,24 +423,27 @@
   (which-key-separator " → " ))
 
 (use-package avy
-  :commands evil-avy-goto-char-timer
+  :commands (evil-avy-goto-char-timer nox/avy-jump-org-block nox/avy-jump-to-link)
   :custom
   (avy-background t)
-  (avy-timeout-seconds 0.5)
   :config
-  (defun nox/avy-jump-org-block ()
-    "Jump to org block using Avy subsystem."
-    (interactive)
-    (avy-jump (rx line-start (zero-or-more blank) "#+begin_src")
-              :action 'goto-char)
-    ;; Jump _into_ the block:
-    (forward-line))
-  (defun nox/avy-jump-to-link ()
-    "Jump to org block using Avy subsystem."
-    (interactive)
-    (avy-jump (rx (or "http://" "https://")) :action 'goto-char))
   (set-face-attribute 'avy-background-face nil
-                      :background 'unspecified))
+                      :foreground 'unspecified
+                      :background 'unspecified
+                      :inherit 'shadow))
+
+(defun nox/avy-jump-org-block ()
+  "Jump to org block using Avy subsystem."
+  (interactive)
+  (avy-jump (rx line-start (zero-or-more blank) "#+begin_src")
+            :action 'goto-char)
+  ;; Jump _into_ the block:
+  (forward-line))
+
+(defun nox/avy-jump-to-link ()
+  "Jump to links using Avy subsystem."
+  (interactive)
+  (avy-jump (rx (or "http://" "https://")) :action 'goto-char))
 
 (defun nox/browse-url-maybe-privately (url &optional new-window)
   "Ask whether URL should be browsed in a private browsing window."
@@ -449,6 +488,11 @@
          (window-height . fit-window-to-buffer))
         ))
 
+(use-package bufferfile
+  :ensure (:host github :repo "jamescherti/bufferfile.el")
+  :custom (bufferfile-use-vc t)
+  :commands (bufferfile-rename bufferfile-delete))
+
 (defun nox/run-commands-for-buffer-names ()
   "Run specific commands for certain buffer names."
   (let ((buffer-name (buffer-name)))
@@ -477,47 +521,27 @@
 ;; Add the function to hooks
 (add-hook 'buffer-list-update-hook 'nox/run-commands-for-buffer-names)
 
-(use-package gptel
-  :commands gptel
+(use-package buffer-terminator
   :hook
-  (gptel-mode . evil-insert-state)
-  (gptel-post-stream . gptel-auto-scroll)
-  (gptel-post-response-functions . gptel-end-of-response)
-  :bind* (("C-c RET" . gptel-send))
-  :custom
-  (gptel-default-mode 'org-mode)
-  (gptel-api-key
-   (nth 0 (process-lines "cat"
-                         (concat
-                          (getenv "HOME")
-                          "/.config/sops-nix/secrets/api_keys/openai"))))
-  :config
-  (gptel-make-kagi "Kagi"
-    :key
-    (nth 0 (process-lines "cat"
-                          (concat
-                           (getenv "HOME")
-                           "/.config/sops-nix/secrets/api_keys/kagi"))))
-  (gptel-make-gemini "Gemini"
-    :key
-    (nth 0 (process-lines "cat"
-                          (concat
-                           (getenv "HOME")
-                           "/.config/sops-nix/secrets/api_keys/gemini")))
-    :stream t))
+  (on-first-input . buffer-terminator-mode))
 
+(use-package calibredb
+  :config
+  (setq calibredb-root-dir "~/Documents/Dropbox/Books/")
+  (setq calibredb-format-nerd-icons t)
+  (setq calibredb-db-dir (expand-file-name "metadata.db" calibredb-root-dir)))
+
+;; slow in org files, don't know the reason
 (use-package expand-region
   :bind ("C-=" . er/expand-region))
 
 (use-package elfeed
   :commands elfeed
+  :bind
+  ([remap elfeed-search-fetch] . nox/elfeed-refresh)
   :custom
   (elfeed-search-filter "@1-weeks-ago +unread")
   :config
-  (require 'nano-elfeed)
-  (evil-define-key 'normal elfeed-search-mode-map
-    (kbd "j") 'nano-elfeed-next-entry
-    (kbd "k") 'nano-elfeed-prev-entry)
   (defun nox/elfeed-show (buff)
     (switch-to-buffer buff)
     (display-line-numbers-mode -1)
@@ -525,11 +549,32 @@
     (elfeed-show-refresh))
   (setq elfeed-show-entry-switch 'nox/elfeed-show))
 
-(use-package elfeed-org
-  :after elfeed
+(use-package elfeed-protocol
   :custom
-  (rmh-elfeed-org-files `(,(concat nox/emacs-directory "elfeed.org")))
-  :config (elfeed-org))
+  (elfeed-use-curl t)
+  (elfeed-curl-extra-arguments '("--insecure"))
+  (elfeed-protocol-enabled-protocols '(fever))
+  (elfeed-protocol-fever-update-unread-only t)
+  (elfeed-protocol-fever-fetch-category-as-tag t)
+  :config
+  (elfeed-set-timeout 36000)
+  (elfeed-protocol-enable)
+  (defconst nox/freshrss-url (nox/get-secret "identity/freshrss/url"))
+
+  (setq elfeed-protocol-feeds `((,(concat "fever+" nox/freshrss-url)
+                                 :api-url
+                                 ,(concat nox/freshrss-url "/api/fever.php")
+                                 :password
+                                 (nox/get-secret "identity/freshrss/pass"))))
+
+  (defun nox/elfeed-refresh ()
+    "Refresh elfeed feed along with unread state. Only use inside elfeed search."
+    (interactive)
+    (mark-whole-buffer)
+    (cl-loop for entry in (elfeed-search-selected)
+             do (elfeed-untag-1 entry 'unread))
+    (elfeed-search-update--force)
+    (elfeed-protocol-fever-reinit nox/freshrss-url)))
 
 (use-package elfeed-tube
   :after elfeed
@@ -537,17 +582,7 @@
   (elfeed-tube-auto-save-p t)
   (elfeed-tube-fields '(duration thumbnail captions chapters))
   :config
-  (elfeed-tube-setup)
-  :general
-  (:keymaps 'elfeed-show-mode-map :states 'normal
-            "F" 'elfeed-tube-mpv-follow-mode
-            "M" 'elfeed-tube-mpv
-            "M-RET" (lambda () (interactive) (nox/avy-jump-to-link) (browse-url-generic))
-            [remap save-buffer] 'elfeed-tube-save)
-  (:keymaps 'elfeed-search-mode-map :states 'normal
-            "F" 'elfeed-tube-fetch
-            [remap elfeed-search-fetch] 'elfeed-update
-            [remap save-buffer] 'elfeed-tube-save))
+  (elfeed-tube-setup))
 
 (use-package elfeed-tube-mpv :after efleed-tube)
 
@@ -557,39 +592,77 @@
                            (display-line-numbers-mode -1)
                            (visual-fill-column-mode)))
 
-(use-package mu4e
+(use-package gptel
+    :commands gptel
+    :hook
+    (gptel-mode . evil-insert-state)
+    (gptel-post-stream . gptel-auto-scroll)
+    (gptel-post-response-functions . gptel-end-of-response)
+    :bind* (("C-c RET" . gptel-send))
+    :custom
+    (gptel-default-mode 'org-mode)
+    (gptel-api-key (nox/get-secret "api/openai"))
+    :config
+    (gptel-make-perplexity "Perplexity"
+      :key (nox/get-secret "api/perplexity")
+      :stream t)
+    (gptel-make-gemini "Gemini"
+      :key (nox/get-secret "api/gemini")
+      :stream t))
+
+;; %s/\]\[/\] \[
+;; %s/\[\([0-9]+\)\]/\[fn:\1\]/g
+
+(use-package posframe :defer t)
+(use-package gptel-quick
+  :ensure (:host github :repo "karthink/gptel-quick")
+  :custom
+  (gptel-quick-display 'posframe))
+
+(use-package jinx
   :ensure nil
-  :defer 5
   :hook
-  (mu4e-main-mode . visual-fill-column-mode)
-  (mu4e-view-mode . visual-fill-column-mode)
-  :config
-  (mu4e t)
-  (setq user-mail-address "adwait@adhk.dev")
-  ;; This is set to 't' to avoid mail syncing issues when using mbsync
-  (setq mu4e-change-filenames-when-moving t)
+  (on-first-input . global-jinx-mode)
+  :bind* (("C-/" . jinx-correct)))
 
-  ;; Refresh mail using isync every 5 minutes
-  (setq mu4e-update-interval (* 5 60))
-  (setq mu4e-get-mail-command "mbsync -a")
-  (setq mu4e-maildir "~/Mail/proton")
+;; (use-package langtool
+;;   :config
+;;   (setq langtool-http-server-host "localhost"
+;;         langtool-http-server-port 8081))
 
-  (setq mu4e-drafts-folder "/Drafts")
-  (setq mu4e-sent-folder   "/Sent")
-  (setq mu4e-refile-folder "/Archive")
-  (setq mu4e-trash-folder  "/Trash")
-
-  ;; prefer text/plain when viewing mail
-  (with-eval-after-load "mm-decode"
-    (add-to-list 'mm-discouraged-alternatives "text/html")
-    (add-to-list 'mm-discouraged-alternatives "text/richtext" t))
-
-  (setq mu4e-maildir-shortcuts
-        '((:maildir "/Archive"                :key ?a)
-          (:maildir "/Drafts"                 :key ?d)
-          (:maildir "/Inbox"                  :key ?i)
-          (:maildir "/Sent"                   :key ?s)
-          (:maildir "/Folders/Wisdom Letters" :key ?w))))
+;; (use-package mu4e
+;;   :ensure nil
+;;   :defer 5
+;;   :hook
+;;   (mu4e-main-mode . visual-fill-column-mode)
+;;   (mu4e-view-mode . visual-fill-column-mode)
+;;   :config
+;;   (mu4e t)
+;;   (setq user-mail-address "adwait@adhk.dev")
+;;   ;; This is set to 't' to avoid mail syncing issues when using mbsync
+;;   (setq mu4e-change-filenames-when-moving t)
+;;
+;;   ;; Refresh mail using isync every 5 minutes
+;;   (setq mu4e-update-interval (* 5 60))
+;;   (setq mu4e-get-mail-command "mbsync -a")
+;;   (setq mu4e-maildir "~/Mail/proton")
+;;
+;;   (setq mu4e-drafts-folder "/Drafts")
+;;   (setq mu4e-sent-folder   "/Sent")
+;;   (setq mu4e-refile-folder "/Archive")
+;;   (setq mu4e-trash-folder  "/Trash")
+;;
+;;   ;; prefer text/plain when viewing mail
+;;   (with-eval-after-load "mm-decode"
+;;     (add-to-list 'mm-discouraged-alternatives "text/html")
+;;     (add-to-list 'mm-discouraged-alternatives "text/richtext" t))
+;;
+;;   (setq mu4e-maildir-shortcuts
+;;         '((:maildir "/Archive"                :key ?a)
+;;           (:maildir "/Drafts"                 :key ?d)
+;;           (:maildir "/Inbox"                  :key ?i)
+;;           (:maildir "/Sent"                   :key ?s)
+;;           (:maildir "/Folders/Wisdom Letters" :key ?w))))
 
 (use-package pdf-tools
   :ensure nil
@@ -609,30 +682,86 @@
   (add-to-list 'revert-without-query ".pdf"))
 
 (use-package org-pdftools
-   :ensure nil
-   :hook (org-mode . org-pdftools-setup-link))
+  :ensure nil
+  :hook (org-mode . org-pdftools-setup-link))
+
+(use-package popper
+  :hook
+  (persp-mode . popper-mode)
+  (popper-mode . popper-echo-mode)
+  :bind* (("C-\\"   . popper-toggle)
+          ("C-|"   . popper-cycle)
+          ("C-M-\\" . popper-toggle-type))
+  :custom
+  (popper-group-function #'popper-group-by-perspective)
+  (popper-mode-line "")
+  (popper-window-height 20)
+  (popper-reference-buffers
+   '("\\*Messages\\*"
+     "\\*Async Shell Command\\*"
+     "^\\*eshell.*\\*$" eshell-mode
+     "^\\*shell.*\\*$"  shell-mode
+     "^\\*term.*\\*$"   term-mode
+     "^\\*vterm.*\\*$"  vterm-mode
+     "schedule.org"
+     help-mode
+     inferior-python-mode
+     helpful-mode
+     dictionary-mode
+     elpaca-log-mode
+     compilation-mode))
+  (popper-echo-transform-function #'nox/popper-truncate-string)
+  :config
+  (defun nox/popper-truncate-string (str)
+    "Truncate STR to 12 characters."
+    (if (> (length str) 12)
+        (substring str 0 12)
+      str)))
+
+(use-package ultra-scroll
+  :hook
+  (on-init-ui . ultra-scroll-mode)
+  :ensure (ultra-scroll  :host github :repo "jdtsmith/ultra-scroll")
+  :init
+  (setq scroll-conservatively 101
+        pixel-scroll-precision-mode t
+        scroll-margin 0))
 
 (use-package uniline :commands uniline-mode)
+
+(use-package wombag
+  :ensure (:host github :repo "karthink/wombag")
+  :commands (wombag wombag-sync)
+  :hook (wombag-entry . visual-fill-column-mode)
+  :config
+  (setq wombag-host (concat "https://wallabag." (nox/get-secret "identity/url"))
+        wombag-username (nox/get-secret "identity/wallabag/user")
+        wombag-password (nox/get-secret "identity/wallabag/pass")
+        wombag-client-id (nox/get-secret "identity/wallabag/id")
+        wombag-client-secret (nox/get-secret "identity/wallabag/secret")))
 
 (use-package nerd-icons-ibuffer
   :hook (ibuffer-mode . nerd-icons-ibuffer-mode))
 
 (use-package ibuffer
   :ensure nil
-  :commands ibuffer
+  :commands (ibuffer persp-ibuffer)
   :hook
   (ibuffer-mode . (lambda () (display-line-numbers-mode -1)))
   (ibuffer-mode . (lambda () (visual-line-mode -1))))
 
 (use-package perspective
-  :commands (nox/restore-perspectives persp-state-load)
+  :commands
+  (nox/restore-perspectives persp-state-load)
   :custom
   (persp-state-default-file "~/.local/share/persp-state")
   (persp-mode-prefix-key (kbd "C-c b"))
   (persp-modestring-short t)
-  (persp-initial-frame-name "1 aurora")
+  (persp-initial-frame-name "1 learn")
   (persp-modestring-dividers '("" "" ""))
   :config
+  ;; auto save state every 2 mins
+  (run-with-timer 120 (* 15 60) 'persp-state-save)
   (add-hook 'kill-emacs-hook #'persp-state-save))
 
 (defun nox/restore-perspectives ()
@@ -641,6 +770,13 @@
   (persp-state-load persp-state-default-file)
   (delete-other-frames))
 
+;; auto load state when opening the first client frame
+(when (daemonp)
+  (add-hook 'server-after-make-frame-hook
+            (lambda ()
+              (unless (bound-and-true-p persp-mode)
+                (nox/restore-perspectives)))))
+
 (with-eval-after-load 'evil
   (evil-define-key '(normal insert) 'global
     (kbd "C-S-h") '(lambda () (interactive) (persp-switch-by-number 1))
@@ -648,9 +784,39 @@
     (kbd "C-S-k") '(lambda () (interactive) (persp-switch-by-number 3))
     (kbd "C-S-l") '(lambda () (interactive) (persp-switch-by-number 4))))
 
+(use-package completion-preview
+  :ensure nil
+  :hook
+  ((comint-mode-hook
+    eshell-mode-hook
+    prog-mode-hook
+    text-mode-hook) . completion-preview-mode)
+  (minibuffer-setup. completion-preview-enable-in-minibuffer)
+  :bind*
+  (:map completion-preview-active-mode-map
+        ("TAB" . completion-preview-complete)
+        ("C-e" . completion-preview-insert))
+  :init
+  (setq completion-preview-adapt-background-color nil)
+  (setq completion-preview-minimum-symbol-length 2)
+  :config
+  (defun completion-preview-enable-in-minibuffer ()
+    "Enable Corfu completion in the minibuffer, e.g., `eval-expression'."
+    (when (where-is-internal #'completion-at-point (list (current-local-map)))
+      (completion-preview-mode 1)))
+
+  (cl-pushnew 'org-self-insert-command completion-preview-commands :test #'equal))
+
 (use-package corfu
-  :hook (on-first-input . global-corfu-mode)
+  :hook
+  (on-first-input . global-corfu-mode)
+  (corfu-mode . corfu-indexed-mode)
+  :commands
+  (corfu-mode
+   corfu-indexed-mode
+   global-corfu-mode)
   :custom
+  (corfu-bar-width 0)
   (corfu-cycle t)                 ;; Enable cycling for `corfu-next/previous'
   (corfu-auto t)                  ;; Enable auto completion
   (corfu-auto-prefix 2)           ;; Enable auto completion
@@ -663,17 +829,15 @@
   (:map corfu-map
         ("M-SPC" . corfu-insert-separator))
   :config
-  (add-to-list 'corfu--frame-parameters '(alpha-background . 0.9))
+  (add-to-list 'corfu--frame-parameters '(font . "CaskaydiaCove Nerd Font-14"))
 
-  (add-to-list
-   'completion-category-overrides `(lsp-capf (styles ,@completion-styles)))
+  (set-face-attribute 'corfu-default nil :inherit 'org-block :background 'unspecified)
 
   (add-hook 'evil-insert-state-exit-hook #'corfu-quit)
   (global-corfu-mode))
 
 (use-package nerd-icons-corfu
   :after corfu
-  :defer 5
   :config
   (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
 
@@ -705,105 +869,61 @@
   ;; useful beyond Corfu.
   (read-extended-command-predicate #'command-completion-default-include-p))
 
+(use-package direnv
+  :hook
+  (prog-mode . direnv-mode)
+  :custom
+  (direnv-use-faces-in-summary nil)
+  (direnv-show-paths-in-summary nil)
+  (direnv-always-show-summary nil))
+
 (use-package apheleia
   :hook
   (prog-mode . apheleia-mode)
   :config
   (push '(nix-ts-mode . nixfmt) apheleia-mode-alist))
 
-(use-package flymake
-  :ensure nil
-  :hook (prog-mode . flymake-mode)
-  :custom
-  (flymake-margin-indicators-string
-   '((error "!»" compilation-error) (warning "»" compilation-warning)
-	 (note "»" compilation-info))))
-
-(use-package lsp-mode
-  :commands lsp
+(use-package flycheck
   :hook
-  (bash-ts-mode . lsp-deferred)                  ;; Enable LSP for Bash
-  (go-ts-mode . lsp-deferred)                    ;; Enable LSP for Go
-  (lsp-mode . lsp-enable-which-key-integration)  ;; Integrate with Which Key
+  (prog-mode . flycheck-mode)
   :custom
-  (lsp-keymap-prefix "C-c l")                    ;; Set the prefix for LSP commands
-  (lsp-inlay-hint-enable t)                      ;; Enable inlay hints
-  (lsp-completion-provider :none)                ;; Disable default completion provider
-  (lsp-log-io nil)                               ;; Disable IO logging for speed
-  (lsp-idle-delay 0)                             ;; Set the delay for LSP to 0
-  (lsp-keep-workspace-alive nil)                 ;; Disable keeping workspace alive
-  (lsp-session-file (locate-user-emacs-file ".lsp-session")) ;; Session file location
+  (flycheck-python-flake8-executable "flake8"))
 
-  ;; Core settings
-  (lsp-enable-xref t)                            ;; Enable cross-references.
-  (lsp-auto-configure t)                         ;; Automatically configure LSP.
-  (lsp-enable-links nil)                         ;; Disable links.
-  (lsp-eldoc-enable-hover t)                     ;; Enable ElDoc hover.
-  (lsp-enable-file-watchers nil)                 ;; Disable file watchers.
-  (lsp-enable-folding nil)                       ;; Disable folding.
-  (lsp-enable-imenu t)                           ;; Enable Imenu support.
-  (lsp-enable-indentation nil)                   ;; Disable indentation.
-  (lsp-enable-on-type-formatting nil)            ;; Disable on-type formatting.
-  (lsp-enable-suggest-server-download t)         ;; Enable server download suggestion.
-  (lsp-enable-symbol-highlighting t)             ;; Enable symbol highlighting.
-  (lsp-enable-text-document-color nil)           ;; Disable text document color.
+;; (use-package flycheck-overlay
+;;   :ensure
+;;   (:host github :repo "konrad1977/flycheck-overlay")
+;;   :custom
+;;   (flycheck-overlay-virtual-line-type 'curved-arrow))
 
-  ;; Modeline settings
-  (lsp-modeline-code-actions-enable nil)         ;; Keep modeline clean.
-  (lsp-modeline-diagnostics-enable nil)          ;; Use `flymake' instead.
-  (lsp-modeline-workspace-status-enable t)       ;; Display "LSP" in the modeline
-  (lsp-signature-doc-lines 1)                    ;; Limit echo area to one line.
-  (lsp-eldoc-render-all nil)                     ;; Render only signature messages.
-
-  ;; Completion settings
-  (lsp-completion-enable t)                      ;; Enable completion.
-  (lsp-completion-enable-additional-text-edit t) ;; Enable additional text edits.
-  (lsp-enable-snippet nil)                       ;; Disable snippets
-  (lsp-completion-show-kind t)                   ;; Show kind in completions.
-  (lsp-completion-show-detail nil)               ;; Disable long signature details
-
-  ;; Lens settings
-  (lsp-lens-enable t)                            ;; Enable lens support.
-
-  ;; Headerline settings
-  (lsp-headerline-breadcrumb-icons-enable t)            ;; Enable icons
-  (lsp-headerline-breadcrumb-enable-diagnostics nil)    ;; Disable diagnostics
-  (lsp-headerline-breadcrumb-enable-symbol-numbers nil) ;; Disable numbers
-
-  ;; Disable semantic tokens.
-  (lsp-semantic-tokens-enable nil)
-
-  ;; nix
-  (lsp-nix-nixd-nixpkgs-expr "import <nixpkgs> { }")
-  (lsp-nix-nixd-nixos-options-expr
-   "(builtins.getFlake \"/home/nox/aurora/flakes\").nixosConfigurations.anomaly.options")
-  (lsp-nix-nixd-home-manager-options-expr
-   "(builtins.getFlake \"/home/nox/aurora/flakes\").homeConfigurations.nox.options")
-  )
-
-(with-eval-after-load 'lsp-mode
-  ;; need lsp-treemacs to make icons in breadcrumb to work
-  (use-package lsp-treemacs :after lsp-mode)
-  ;; lsp theming
-  (set-face-attribute 'lsp-face-highlight-textual nil
-                      :underline t
-                      :inherit nil))
-
-(use-package lsp-ui
-  :hook
-  (lsp-mode . lsp-ui-mode)
-  :custom
-  (lsp-ui-doc-show-with-cursor nil)
-  (lsp-ui-doc-show-with-mouse t)
-  (lsp-ui-doc-position 'at-point)
-  (lsp-ui-doc-border "#585b70")
-  (lsp-ui-doc-enable t))
+(use-package eglot)
+(use-package markdown-mode)
+;; (use-package poly-org :after org)
+;; (use-package polymode
+;;   :after org
+;;   :config
+;;   (add-hook 'polymode-init-inner-hook
+;;           (lambda ()
+;;             (let* ((fix-pitch (face-attribute 'fixed-pitch :family))
+;;                    (fix-font (face-attribute 'fixed-pitch :font))
+;;                    (fix-height (face-attribute 'fixed-pitch :height))
+;;                    (background (face-attribute 'org-block-begin-line :background))
+;;                    (props `(:background ,background
+;;                             :extend t
+;;                             :height ,fix-height
+;;                             :family ,fix-pitch
+;;                             :font ,fix-font)))
+;;               (oset pm/chunkmode adjust-face props)))))
 
 (use-package nix-mode :mode "\\.nix\\'")
-(use-package nushell-mode :mode "\\.nu\\'")
+(use-package nix-ts-mode
+  :hook
+  (nix-mode . nix-ts-mode)
+  (nix-ts-mode . eglot-ensure))
 
-(use-package nix-ts-mode :hook (nix-ts-mode . lsp-deferred))
-(use-package nushell-ts-mode :hook (nushell-ts-mode . lsp-deferred))
+(use-package python-ts-mode
+  :ensure nil :mode "\\.py\\'" :hook (python-ts-mode . eglot-ensure))
+
+(use-package c-ts-mode :ensure nil :mode "\\.c\\'" :hook (c-ts-mode . eglot-ensure))
 
 (use-package ligature
   :hook (on-first-input . global-ligature-mode)
@@ -811,7 +931,7 @@
   ;; Enable the "www" ligature in every possible major mode
   (ligature-set-ligatures 't '("www"))
   ;; Enable traditional ligature support in eww-mode, if the
-  ;; `variable-pitch' face supports it
+  ;; `variable-pith' face supports it
   (ligature-set-ligatures 'eww-mode '("ff" "fi" "ffi"))
   ;; Enable all Cascadia Code ligatures in programming modes
   (ligature-set-ligatures '(prog-mode org-mode)
@@ -819,14 +939,14 @@
                             ":::" "::=" "=:=" "===" "==>" "=!=" "=>>" "=<<" "=/=" "!=="
                             "!!." ">=>" ">>=" ">>>" ">>-" ">->" "->>" "-->" "---" "-<<"
                             "<~~" "<~>" "<*>" "<||" "<|>" "<$>" "<==" "<=>" "<=<" "<->"
-                            "..." "+++" "/==" "///" "_|_" "www" "&&" "^=" "~~" "~@" "~="
-                            "~>" "~-" "**" "*>" "*/" "||" "|}" "|]" "=>" "!=" "!!" ">:"
+                            "..." "+++" "/==" "///" "_|_" "www" "&&" "^=" "~~" "~@"
+                            "~=" "~>" "~-" "**" "*>" "*/" "||" "|}" "|]" "=>" "!="
+                            "!!" ">:" "\\\\" "://" "..<" "</>" "###" "#_(" "<<<" "<+>"
                             ">=" ">>" ">-" "-~" "-|" "->" "--" "-<" "<~" "<*" "<|" "<:"
                             "<$" "<=" "<>" "<-" "<<" "<+" "</" "#{" "#[" "#:" "#=" "#!"
                             "##" "#(" "#?" "#_" "%%" ".=" ".-" ".." ".?" "+>" "++" "?:"
                             "?=" "?." "??" ";;" "/*" "/=" "/>" "//" "__" "~~" "(*" "*)"
-                            "<--" "<-<" "<<=" "<<-" "<<<" "<+>" "</>" "###" "#_(" "..<"
-                            "\\\\" "://")))
+                            "<--" "<-<" "<<=" "<<-")))
 
 (use-package rainbow-delimiters
   :hook
@@ -834,21 +954,22 @@
   :config
   (setq rainbow-delimiters-max-face-count 5))
 
+(use-package rainbow-mode
+  :hook
+  (prog-mode . rainbow-mode))
+
 (use-package projectile
   :bind-keymap
   ("C-c p" . projectile-command-map)
   :config
-  (projectile-mode 1))
+  (projectile-mode))
 
-;; (use-package sops
-;;   :mode "\\.sops.yaml\\'"
-;;   :hook
-;;   (sops-mode . yaml-ts-mode)
-;;   :bind (("C-c C-c" . sops-save-file)
-;;          ("C-c C-k" . sops-cancel)
-;;          ("C-c C-d" . sops-edit-file))
-;;   :config
-;;   (global-sops-mode))
+(use-package sops
+  :config
+  (global-sops-mode)
+  :bind (("C-c C-c" . sops-save-file)
+         ("C-c C-k" . sops-cancel)
+         ("C-c C-d" . sops-edit-file)))
 
 (use-package treesit-auto
   :hook
@@ -858,24 +979,22 @@
   :config
   (treesit-auto-add-to-auto-mode-alist 'all))
 
+(use-package yasnippet
+  :hook
+  (prog-mode . yas-minor-mode)
+  (org-mode . yas-minor-mode)
+  :custom
+  (yas-snippet-dirs `(,(concat nox/emacs-directory "snippets"))))
+
 (use-package dired
-  :after evil
   :ensure nil
   :commands (dired dired-jump)
   :hook
-  (dired-mode . hl-line-mode)
   ;; To hide dot-files by default
   (dired-mode . dired-omit-mode)
-  ;; removing line numbers
-  (dired-mode . (lambda () (display-line-numbers-mode -1)))
-  (image-mode . (lambda () (display-line-numbers-mode -1)))
   :custom
   ;; hide files/directories starting with "." in dired-omit-mode
   (dired-omit-files (rx (seq bol ".")))
-  ;; Display files in a human-readable format and group directories first
-  ;; Also remove owner and group information
-  (dired-listing-switches "-agho --group-directories-first")
-
   ;; Enable "do what I mean" for target directories
   (dired-dwim-target t)
 
@@ -884,22 +1003,70 @@
   :config
   (setq dired-free-space nil
         dired-deletion-confirmer 'y-or-n-p
-        dired-filter-verbose nil
         dired-clean-confirm-killing-deleted-buffers nil
         dired-recursive-deletes 'top
         dired-recursive-copies  'always
-        dired-create-destination-dirs 'ask)
-  (evil-define-key 'normal dired-mode-map
-    (kbd "h") 'dired-up-directory
-    (kbd "l") 'dired-open-file))
-
-(use-package all-the-icons-dired
-  :hook (dired-mode . all-the-icons-dired-mode)
-  :commands (dired dired-jump))
+        dired-create-destination-dirs 'ask))
 
 (use-package diredfl
-  :hook (dired-mode . diredfl-mode)
-  :commands (dired dired-jump))
+  :hook
+  ;;(dired-mode . diredfl-mode)
+  ;; highlight parent and directory preview as well
+  (dirvish-directory-view-mode . diredfl-mode)
+  :config
+  (set-face-attribute 'diredfl-dir-name nil :bold t))
+
+(use-package dirvish
+  :init
+  (dirvish-override-dired-mode)
+  :hook
+  (dired-mode . (lambda () (visual-line-mode -1)))
+  :custom
+  (dirvish-quick-access-entries
+   '(("h" "~/"                          "Home")
+     ("D" "~/Documents/"                "Documents")
+     ("n" "~/Documents/notes/"          "Notes")
+     ("d" "~/Downloads/"                "Downloads")
+     ("t" "~/.local/share/Trash/files/" "TrashCan")))
+  (dired-listing-switches
+   "-l --almost-all --human-readable --group-directories-first --no-group")
+  (delete-by-moving-to-trash t)
+  (dirvish-mode-line-format
+   '(:left (sort symlink) :right (omit yank index)))
+  (dirvish-attributes
+   '(nerd-icons file-time file-size collapse subtree-state vc-state git-msg))
+  (dirvish-side-attributes
+   '(vc-state file-size nerd-icons collapse))
+  (dirvish-use-header-line 'global)     ; make header line span all panes
+  (dirvish-mode-line-bar-image-width 0) ; hide the leading bar image
+  (dirvish-reuse-session 'open)
+  :config
+  (evil-define-key 'normal dired-mode-map
+    (kbd "h") 'dired-up-directory
+    (kbd "l") 'dired-find-file)
+
+  (evil-define-key 'normal dirvish-mode-map
+    (kbd "?") 'dirvish-dispatch
+    (kbd "a") 'dirvish-quick-access
+    (kbd "TAB") 'dirvish-subtree-toggle
+    (kbd "q") 'dirvish-quit)
+
+  (dirvish-side-follow-mode))     ; similar to `treemacs-follow-mode'
+
+(use-package dirvish-emerge
+  :commands (dirvish-emerge-mode)
+  :ensure nil
+  :config
+  (setq dirvish-emerge-groups
+        ;; Header string |    Type    |    Criterias
+        '(("Recent files"  (predicate . recent-files-2h))
+          ("Documents"     (extensions "pdf" "tex" "bib" "epub"))
+          ("Text"          (extensions "md" "org" "txt"))
+          ("Video"         (extensions "mp4" "mkv" "webm"))
+          ("Pictures"      (extensions "jpg" "png" "svg" "gif"))
+          ("Audio"         (extensions "mp3" "flac" "wav" "ape" "aac"))
+          ("Archives"      (extensions "gz" "rar" "zip"))))
+  )
 
 (use-package dired-open
   :commands (dired dired-jump)
@@ -911,36 +1078,12 @@
                                 ("mkv" . "mpv")
                                 ("mp4" . "mpv"))))
 
-(use-package dired-rainbow
-  :commands (dired dired-jump)
-  :config
-  (dired-rainbow-define-chmod directory "#6cb2eb" "d.*")
-  (dired-rainbow-define-chmod executable-unix "#38c172" "-.*x.*")
-  (dired-rainbow-define html "#eb5286" ("css" "less" "sass" "scss" "htm" "html" "jhtm" "mht" "eml" "mustache" "xhtml"))
-  (dired-rainbow-define xml "#f2d024" ("xml" "xsd" "xsl" "xslt" "wsdl" "bib" "json" "msg" "pgn" "rss" "yaml" "yml" "rdata"))
-  (dired-rainbow-define document "#9561e2" ("docm" "doc" "docx" "odb" "odt" "pdb" "pdf" "ps" "rtf" "djvu" "epub" "odp" "ppt" "pptx"))
-  (dired-rainbow-define markdown "#ffed4a" ("org" "etx" "info" "markdown" "md" "mkd" "nfo" "pod" "rst" "tex" "textfile" "txt"))
-  (dired-rainbow-define database "#6574cd" ("xlsx" "xls" "csv" "accdb" "db" "mdb" "sqlite" "nc"))
-  (dired-rainbow-define media "#de751f" ("mp3" "mp4" "MP3" "MP4" "avi" "mpeg" "mpg" "flv" "ogg" "mov" "mid" "midi" "wav" "aiff" "flac"))
-  (dired-rainbow-define image "#f66d9b" ("tiff" "tif" "cdr" "gif" "ico" "jpeg" "jpg" "png" "psd" "eps" "svg"))
-  (dired-rainbow-define log "#c17d11" ("log"))
-  (dired-rainbow-define shell "#f6993f" ("awk" "bash" "bat" "sed" "sh" "zsh" "vim"))
-  (dired-rainbow-define interpreted "#38c172" ("py" "ipynb" "rb" "pl" "t" "msql" "mysql" "pgsql" "sql" "r" "clj" "cljs" "scala" "js"))
-  (dired-rainbow-define compiled "#4dc0b5" ("asm" "cl" "lisp" "el" "c" "h" "c++" "h++" "hpp" "hxx" "m" "cc" "cs" "cp" "cpp" "go" "f" "for" "ftn" "f90" "f95" "f03" "f08" "s" "rs" "hi" "hs" "pyc" ".java"))
-  (dired-rainbow-define executable "#8cc4ff" ("exe" "msi"))
-  (dired-rainbow-define compressed "#51d88a" ("7z" "zip" "bz2" "tgz" "txz" "gz" "xz" "z" "Z" "jar" "war" "ear" "rar" "sar" "xpi" "apk" "xz" "tar"))
-  (dired-rainbow-define packaged "#faad63" ("deb" "rpm" "apk" "jad" "jar" "cab" "pak" "pk3" "vdf" "vpk" "bsp"))
-  (dired-rainbow-define encrypted "#ffed4a" ("gpg" "pgp" "asc" "bfe" "enc" "signature" "sig" "p12" "pem"))
-  (dired-rainbow-define fonts "#6cb2eb" ("afm" "fon" "fnt" "pfb" "pfm" "ttf" "otf"))
-  (dired-rainbow-define partition "#e3342f" ("dmg" "iso" "bin" "nrg" "qcow" "toast" "vcd" "vmdk" "bak"))
-  (dired-rainbow-define vc "#0074d9" ("git" "gitignore" "gitattributes" "gitmodules")))
-
-(use-package peep-dired
-  :commands (dired dired-jump)
-  :config
-  (evil-define-key 'normal peep-dired-mode-map
-    (kbd "j") 'peep-dired-next-file
-    (kbd "k") 'peep-dired-prev-file))
+;; (use-package peep-dired
+;;   :commands (dired dired-jump)
+;;   :config
+;;   (evil-define-key 'nil peep-dired-mode-map
+;;     (kbd "j") 'peep-dired-next-file
+;;     (kbd "k") 'peep-dired-prev-file))
 
 (set-face-attribute 'variable-pitch nil
                     :family "Inter"
@@ -950,18 +1093,26 @@
                     :family "CaskaydiaCove Nerd Font"
                     :height 140
                     :weight 'medium)
+
 (set-face-attribute 'default nil :inherit 'fixed-pitch)
-(set-face-attribute 'fixed-pitch-serif nil :inherit 'fixed-pitch :family 'unspecified)
+(set-face-attribute 'fixed-pitch-serif nil
+                    :inherit 'fixed-pitch
+                    :family 'unspecified)
 
-;; setting the emoji font family
-;; https://emacs.stackexchange.com/a/80186
-(set-fontset-font t 'emoji
-                  '("Apple Color Emoji" . "iso10646-1") nil 'prepend)
+(defun nox/set-fonts ()
+  "Set fonts and face attributes."
+  ;; setting the emoji font family
+  ;; https://emacs.stackexchange.com/a/80186
+  (set-fontset-font t 'emoji
+                    '("Apple Color Emoji" . "iso10646-1") nil 'prepend)
 
 
-;; italic comments and keywords
-(set-face-attribute 'font-lock-comment-face nil
-                    :italic t)
+  ;; italic comments and keywords
+  (set-face-attribute 'font-lock-comment-face nil
+                      :italic t))
+(if (daemonp)
+    (add-hook 'server-after-make-frame-hook #'nox/set-fonts)
+  (nox/set-fonts))
 
 ;; setting the line spacing
 (setq-default line-spacing 0.16)
@@ -975,7 +1126,6 @@
 
 (use-package diff-hl
   :hook (vc-dir-mode . diff-hl-mode)
-  :hook (lsp-mode . diff-hl-mode)
   :commands
   (diff-hl-stage-current-hunk
    diff-hl-revert-hunk
@@ -986,7 +1136,7 @@
   (diff-hl-side 'left)
   ;; Customize symbols for each change type.
   (diff-hl-margin-symbols-alist '((insert . "│")
-                                  (delete . "-")
+                                  (delete . "│")
                                   (change . "│")
                                   (unknown . "?")
                                   (ignored . "i")))
@@ -1002,7 +1152,9 @@
   :commands magit-status
   :hook
   (magit-pre-refresh . diff-hl-magit-pre-refresh)
-  (magit-post-refresh . diff-hl-magit-post-refresh))
+  (magit-post-refresh . diff-hl-magit-post-refresh)
+  :config
+  (setopt magit-format-file-function #'magit-format-file-nerd-icons))
 
 (use-package helpful
   :commands
@@ -1020,7 +1172,6 @@
   ([remap view-hello-file] . helpful-at-point))
 
 (use-package consult
-  ;;:after perspective
   :bind
   ([remap bookmark-jump] . consult-bookmark)
   :commands
@@ -1032,8 +1183,9 @@
   :hook (completion-list-mode . consult-preview-at-point-mode)
   :config
   ;; persp with consult
-  ;;(consult-customize consult--source-buffer :hidden t :default nil)
-  ;;(add-to-list 'consult-buffer-sources persp-consult-source)
+  (with-eval-after-load 'perspective
+    (consult-customize consult--source-buffer :hidden t :default nil)
+    (add-to-list 'consult-buffer-sources 'persp-consult-source))
 
   (setq register-preview-delay 0.5
         register-preview-function #'consult-register-format)
@@ -1165,12 +1317,30 @@
   ;; Tidy shadowed file names
   :hook (rfn-eshadow-update-overlay . vertico-directory-tidy))
 
+(defun nox/org-screenshot ()
+  "Take a screenshot into a time-stamped unique-named file in the
+          images folder and insert a link to this file with a relative path."
+  (interactive)
+  (let* ((images-dir (expand-file-name "images" default-directory))
+         (filename (concat (make-temp-name
+                            (concat images-dir "/"
+                                    (file-name-nondirectory
+                                     (file-name-sans-extension buffer-file-name))
+                                    "_"))
+                           ".png")))
+    (unless (file-exists-p images-dir)
+      (make-directory images-dir t))
+    (call-process "scp" nil nil nil filename)
+    (insert (concat "[[./images/" (file-name-nondirectory filename) "]]"))
+    (org-link-preview-region)))
+
 (defun nox/org-font-setup ()
-  ;; Ensure that anything that should be fixed-pitch in Org files appears that way
+  "Ensure that anything that should be fixed-pitch in Org files appears that way"
+  (interactive)
   (set-face-attribute 'org-block-begin-line nil
                       :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-block-end-line nil
-                      :inherit '(font-lock-comment-face fixed-pitch))
+                      :inherit '(org-block-begin-line))
   (set-face-attribute 'org-meta-line nil
                       :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-document-info-keyword nil
@@ -1181,6 +1351,9 @@
                       :inherit '(font-lock-comment-face fixed-pitch))
   (set-face-attribute 'org-cite nil
                       :underline nil)
+
+  (set-face-attribute 'org-block nil
+                      :foreground 'unspecified)
 
   (set-face-attribute 'org-verbatim nil
                       :inherit 'variable-pitch)
@@ -1199,125 +1372,211 @@
   ;; disable large title
   (set-face-attribute 'org-document-title nil :height 'unspecified))
 
-(use-package org-roam
-  :commands
-  (org-roam-capture
-   org-roam-dailies-capture-today
-   org-roam-node-find
-   nox/org-roam-capture-tasks
-   org-roam-goto-today)
+;; Using RETURN to follow links in Org/Evil
+;; Unmap keys in 'evil-maps if not done, (setq org-return-follows-link t) will not work
+(with-eval-after-load 'evil-maps
+  (define-key evil-motion-state-map (kbd "SPC") nil)
+  (define-key evil-motion-state-map (kbd "RET") nil)
+  (define-key evil-motion-state-map (kbd "TAB") nil))
+
+;; Setting RETURN key in org-mode to follow links
+(setq org-return-follows-link  t)
+(use-package org
+  :ensure `(org :repo "https://code.tecosaur.net/tec/org-mode.git/"
+                :branch "dev")
+  :defer t
+  :hook
+  (org-mode . org-indent-mode)
+  (org-mode . prettify-symbols-mode)
+  (org-mode . (lambda () (display-line-numbers-mode -1)))
+  (org-mode . visual-line-mode)
+  (org-mode . variable-pitch-mode)
+  (org-num-mode . nox/org-mode-hide-stars)
+  (org-capture-mode . evil-insert-state)
   :custom
-  (org-roam-directory nox/notes-directory)
-  (org-roam-dailies-directory "Logs/")
-  (org-roam-completion-everywhere t)
+  (org-M-RET-may-split-line nil)
+  (org-startup-with-latex-preview t)
+  (org-attach-id-dir "attachments/")
+  (org-attach-use-inheritance t)
+  (org-attach-method 'mv)
+  (org-startup-with-link-previews t)
+  (org-image-align 'center)
+  (org-image-actual-width nil)
+  (org-fontify-quote-and-verse-blocks t)
+  (org-support-shift-select t)
+  (org-hide-emphasis-markers t)
+  (org-hide-leading-stars t)
+  :config
+  (require 'docx-to-org)
+  (nox/org-font-setup))
 
-;; see help for format-time-string function for time templates
-(org-roam-capture-templates
- '(("d" "default" item "%?%i"
-    :if-new (file+head+olp
-             "%<%Y%m%d%H%M%S>-${slug}.org"
-             "#+title: ${title}\n#+date: [%<%Y-%m-%d %a %H:%M>]\n#+category: note"
-             ("${title}"))
-    :unnarrowed t
-    :kill-buffer t)
-   ("l" "linked" item "%?\n%a"
-    :if-new (file+head+olp
-             "%<%Y%m%d%H%M%S>-${slug}.org"
-             "#+title: ${title}\n#+date: [%<%Y-%m-%d %a %H:%M>]\n#+category: note"
-             ("${title}"))
-    :unnarrowed t
-    :kill-buffer t)))
+(use-package denote
+  :custom
+  (denote-journal-extras-title-format 'day-date-month-year)
+  :hook
+  (dired-mode . denote-dired-mode)
+  :config
+  (require 'denote-journal-extras)
 
-(org-roam-dailies-capture-templates
- '(("d" "default" item "*%<%H:%M>* %?"
-    :if-new (file+head+olp
-             "%<%Y-%m-%d>.org"
-             "#+title: %<%Y-%m-%d>\n#+date: [%<%Y-%m-%d %a %H:%M>]\n#+category: daily"
-             ("%<%B %d, %Y>"))
-    :unnarrowed t
-    :kill-buffer t)
- ("l" "linked" item "*%<%H:%M>* %?\n%a"
-  :if-new (file+head+olp
-           "%<%Y-%m-%d>.org"
-           "#+title: %<%Y-%m-%d>\n#+date: [%<%Y-%m-%d %a %H:%M>]\n#+category: daily"
-           ("%<%B %d, %Y>"))
-  :unnarrowed t
-  :kill-buffer t)))
+  (with-eval-after-load 'org-capture
+    (add-to-list 'org-capture-templates
+                 '("j" "Journal" entry
+                   (file denote-journal-extras-path-to-new-or-existing-entry)
+                   "* %U %?\n%i\n%a"
+                   :kill-buffer t
+                   :empty-lines 1))
 
-:config
-(org-roam-db-autosync-mode)
-;; auto insert mode
-(add-hook 'org-capture-mode-hook 'evil-insert-state)
+    (add-to-list 'org-capture-templates
+                 '("N" "New stub note (Denote)" plain
+                   (file denote-last-path)
+                   #'denote-org-capture
+                   :no-save t
+                   :immediate-finish t
+                   :kill-buffer t))
 
-(defun nox/org-roam-capture-tasks ()
-  "Custom capture list for org roam"
-  (interactive)
-  (org-roam-capture-
-   :node (org-roam-node-create)
-   :templates '(
-                ("t" "General Task"
-                 entry "*** TODO %?"
-                 :kill-buffer t
-                 :if-new (file+head+olp
-                          "Inbox/tasks.org"
-                          "#+title: Tasks\n#+category: tasks"
-                          ("Tasks" "General Tasks")))
-                ("l" "Linked Task"
-                 entry "*** TODO %?\n%a"
-                 :kill-buffer t
-                 :if-new (file+head+olp
-                          "Inbox/tasks.org"
-                          "#+title: Tasks\n#+category: tasks"
-                          ("Tasks" "Linked Tasks")))
-                ))))
+    (add-to-list 'org-capture-templates
+                 '("n" "New note (Denote)" plain
+                   (file denote-last-path)
+                   #'denote-org-capture
+                   :no-save t
+                   :immediate-finish nil
+                   :kill-buffer t))))
 
-(defun nox/org-hide-properties ()
-  "Hide all org-mode headline property drawers in buffer. Could be slow if it has a lot of overlays."
-  (interactive)
-  (save-excursion
-    (goto-char (point-min))
-    (while (re-search-forward
-            "^ *:properties:\n\\( *:.+?:.*\n\\)+ *:end:\n" nil t)
-      (let ((ov_this (make-overlay (match-beginning 0) (match-end 0))))
-        (overlay-put ov_this 'display "")
-        (overlay-put ov_this 'hidden-prop-drawer t))))
-  (put 'org-toggle-properties-hide-state 'state 'hidden))
+(use-package consult-denote
+  :after denote
+  :config
+  (consult-denote-mode))
 
-(defun nox/org-show-properties ()
-  "Show all org-mode property drawers hidden by org-hide-properties."
-  (interactive)
-  (remove-overlays (point-min) (point-max) 'hidden-prop-drawer t)
-  (put 'org-toggle-properties-hide-state 'state 'shown))
+;;(denote-journal-extras-path-to-new-or-existing-entry
+;;(denote-valid-date-p "2025-01-12"))
 
-(defun nox/org-toggle-properties ()
-  "Toggle visibility of property drawers."
-  (interactive)
-  (if (eq (get 'org-toggle-properties-hide-state 'state) 'hidden)
-      (nox/org-show-properties)
-    (nox/org-hide-properties)))
+(use-package denote-explore
+  :after denote)
 
-;; call org-hide-properties when inside org mode and org capture
-(add-hook 'org-mode-hook 'nox/org-hide-properties)
-(add-hook 'org-capture-mode-hook 'nox/org-hide-properties)
+(use-package org-agenda
+  :ensure nil
+  :after org
+  :custom
+  (org-agenda-files `(,nox/schedule-file))
+  (org-agenda-start-on-weekday 0)
+  (org-agenda-skip-scheduled-if-done t)
+  (org-agenda-skip-deadline-if-done t)
+  (org-agenda-weekend-days '(6)))
 
-(with-eval-after-load 'org-roam
+(use-package org-download
+  :commands (org-download-clipboard org-download-screenshot)
+  :custom
+  (org-download-image-org-width 700)
+  (org-download-screenshot-method "grim -g \"$(slurp -w 0 -b \"#fab38733\")\" %s")
+  (org-download-method 'attach))
 
-  (cl-defmethod org-roam-node-backlinkscount ((node org-roam-node))
-    (let* ((count (caar (org-roam-db-query
-                         [:select (funcall count source)
-                                  :from links
-                                  :where (= dest $s1)
-                                  :and (= type "id")]
-                         (org-roam-node-id node)))))
-      (format "[%d]" count)))
+(use-package org-latex-preview
+  :ensure nil
+  :after org
+  :hook
+  (org-mode . org-latex-preview-auto-mode)
+  :custom
+  ;; Enable consistent equation numbering
+  (org-latex-preview-numbered t)
+  ;; org latex live preview
+  (org-latex-preview-live t)
+  ;; More immediate live-previews -- the default delay is 1 second
+  (org-latex-preview-live-debounce 0.25)
+  :config
+  ;; Increase preview width
+  (plist-put org-latex-preview-appearance-options
+             :page-width 0.8)
+  (plist-put org-latex-preview-appearance-options
+             :scale 2)
 
-  (setq org-roam-node-display-template
-        (concat "${title:80}" (propertize "${tags:20}" 'face 'org-tag))
-        org-roam-node-annotation-function
-        (lambda (node)
-          (concat (org-roam-node-backlinkscount node) " "
-                  (marginalia--time (org-roam-node-file-mtime node)))))
-  )
+  ;; Block C-n, C-p etc from opening up previews when using auto-mode
+  (setq org-latex-preview-auto-ignored-commands
+        '(next-line previous-line mwheel-scroll
+                    scroll-up-command scroll-down-command))
+
+  ;; code for centering LaTeX previews
+  (defun nox/org-latex-preview-uncenter (ov)
+    (overlay-put ov 'before-string nil))
+  (defun nox/org-latex-preview-recenter (ov)
+    (overlay-put ov 'before-string (overlay-get ov 'justify)))
+  (defun nox/org-latex-preview-center (ov)
+    (save-excursion
+      (goto-char (overlay-start ov))
+      (when-let* ((elem (org-element-context))
+                  ((or (eq (org-element-type elem) 'latex-environment)
+                       (string-match-p "^\\\\\\[" (org-element-property :value elem))))
+                  (img (overlay-get ov 'display))
+                  (prop `(space :align-to (- center (0.55 . ,img))))
+                  (justify (propertize " " 'display prop 'face 'default)))
+        (overlay-put ov 'justify justify)
+        (overlay-put ov 'before-string (overlay-get ov 'justify)))))
+
+  (define-minor-mode org-latex-preview-center-mode
+    "Center equations previewed with `org-latex-preview'."
+    :global nil
+    (if org-latex-preview-center-mode
+        (progn
+          (add-hook 'org-latex-preview-overlay-open-functions
+                    #'nox/org-latex-preview-uncenter nil :local)
+          (add-hook 'org-latex-preview-overlay-close-functions
+                    #'nox/org-latex-preview-recenter nil :local)
+          (add-hook 'org-latex-preview-overlay-update-functions
+                    #'nox/org-latex-preview-center nil :local))
+      (remove-hook 'org-latex-preview-overlay-close-functions
+                   #'nox/org-latex-preview-recenter)
+      (remove-hook 'org-latex-preview-overlay-update-functions
+                   #'nox/org-latex-preview-center)
+      (remove-hook 'org-latex-preview-overlay-open-functions
+                   #'nox/org-latex-preview-uncenter))))
+
+(use-package org-protocol
+  :ensure nil
+  :after org)
+
+(use-package org-superstar
+  :commands (org-superstar-mode)
+  :hook
+  (org-mode . org-superstar-mode)
+  :custom
+  (org-superstar-headline-bullets-list
+   '("◉" "◈" "○" "▷"))
+  ;; Stop cycling bullets to emphasize hierarchy of headlines.
+  (org-superstar-cycle-headline-bullets nil)
+  ;; Hide away leading stars on terminal.
+  (org-superstar-leading-bullet nil)
+  ;; 42 -> *
+  ;; 43 -> +
+  ;; 45 -> -
+  (org-superstar-item-bullet-alist '((42 . 8226) (43 . 10148) (45 . 8226)))
+  :config
+  (set-face-attribute 'org-superstar-leading nil :height 1.3)
+  (set-face-attribute 'org-superstar-header-bullet nil
+                      :height 1.2
+                      :inherit 'fixed-pitch)
+  (set-face-attribute 'org-superstar-item nil :height 1.2))
+
+(use-package org-todoist
+  :after org
+  :ensure (:host github
+                 :repo "lillenne/org-todoist"
+                 :branch "main"
+                 :files ("org-todoist.el"))
+  :config
+  (add-to-list 'org-capture-templates
+               '("i" "Inbox (Todoist)" entry
+                 (file+olp nox/schedule-file
+                           "Inbox"
+                           "Default Section")
+                 "* TODO %?"))
+  (add-to-list 'org-capture-templates
+               '("s" "Scheduled Task (Todoist)" entry
+                 (function org-todoist-find-project-and-section)
+                 "* TODO %^{What is the task} %^G %(progn (org-schedule nil) nil)\n%?"))
+
+  ;; (run-with-timer 60 (* 15 60) 'org-todoist-background-sync)
+  (setq org-todoist-file nox/schedule-file)
+  (setq org-todoist-infer-project-for-capture nil)
+  (setq org-todoist-api-token (nox/get-secret "api/todoist")))
 
 (setq-default prettify-symbols-alist
               '(("#+begin_src emacs-lisp" . "")
@@ -1334,38 +1593,6 @@
                 ("(interactive)" . "")))
 
 (setq prettify-symbols-unprettify-at-point 'right-edge)
-
-;; Using RETURN to follow links in Org/Evil
-;; Unmap keys in 'evil-maps if not done, (setq org-return-follows-link t) will not work
-(with-eval-after-load 'evil-maps
-  (define-key evil-motion-state-map (kbd "SPC") nil)
-  (define-key evil-motion-state-map (kbd "RET") nil)
-  (define-key evil-motion-state-map (kbd "TAB") nil))
-
-;; Setting RETURN key in org-mode to follow links
-(setq org-return-follows-link  t)
-
-(use-package org
-  :ensure nil
-  :defer t
-  :hook
-  (org-mode . org-indent-mode)
-  (org-mode . prettify-symbols-mode)
-  (org-mode . (lambda () (display-line-numbers-mode -1)))
-  (org-mode . visual-line-mode)
-  (org-mode . variable-pitch-mode)
-  :custom
-  (org-attach-id-dir "attachments/")
-  (org-attach-use-inheritance t)
-  (org-attach-method 'mv)
-  (org-startup-with-inline-images t)
-  (org-image-align 'center)
-  (org-fontify-quote-and-verse-blocks t)
-  (org-support-shift-select t)
-  (org-hide-emphasis-markers t)
-  :config
-  (require 'docx-to-org)
-  (nox/org-font-setup))
 
 (use-package toc-org
     :hook (org-mode . toc-org-enable))
@@ -1391,6 +1618,15 @@
                                          `(lambda (c)
                                             (if (char-equal c ?<) t (,electric-pair-inhibit-predicate c)))))))
 
+(use-package org-babel
+  :defer t
+  :ensure nil
+  :config
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((C . t)
+     (python . t))))
+
 (use-package svg-tag-mode
   :after org
   :hook
@@ -1403,27 +1639,21 @@
   (defconst time-re "[0-9]\\{2\\}:[0-9]\\{2\\}")
   (defconst day-re "[A-Za-z]\\{3\\}")
   (defconst day-time-re (format "\\(%s\\)? ?\\(%s\\)?" day-re time-re))
+
   (setq svg-tag-tags
         `(
-          ;; Task priority
-          ("\\[#A\\]" .
-           ((lambda (tag) (svg-tag-make "#A"  :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'red))
-                                        :beg 2 :end -1 :margin 0))))
-          ("\\[#B\\]" .
-           ((lambda (tag) (svg-tag-make "#B"  :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'yellow))
-                                        :beg 2 :end -1 :margin 0))))
-          ("\\[#C\\]" .
-           ((lambda (tag) (svg-tag-make "#C"  :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'green))
-                                        :beg 2 :end -1 :margin 0))))
+          ;; footnote in form [fn:1]
+          ("\\(\\[fn:\\)" .
+           ((lambda (tag) (svg-tag-make tag  :inverse t :beg 1 :end -1 :crop-right t ))))
+          ("\\[fn:\\([0-9]+\\]\\)" .
+           ((lambda (tag) (svg-tag-make tag  :end -1 :crop-left t ))))
 
           ;; Citation of the form [cite:@Knuth:1984]
           ("\\(\\[cite:@[A-Za-z]+:\\)" .
            ((lambda (tag) (svg-tag-make tag  :inverse t
                                         :beg 7 :end -1
                                         :crop-right t))))
+
           ("\\[cite:@[A-Za-z]+:\\([0-9]+\\]\\)" .
            ((lambda (tag) (svg-tag-make tag  :end -1
                                         :crop-left t))))
@@ -1467,44 +1697,44 @@
           ("TODO" .
            ((lambda (tag) (svg-tag-make "TODO"
                                         :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'peach))
+                                        `(:foreground ,(catppuccin-get-color 'peach))
                                         :inverse t
                                         :margin 0))))
           ("READ" .
            ((lambda (tag) (svg-tag-make "READ"
                                         :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'rosewater))
+                                        `(:foreground ,(catppuccin-get-color 'rosewater))
                                         :inverse t
                                         :margin 0))))
           ("PLAN" .
            ((lambda (tag) (svg-tag-make "PLAN"
                                         :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'maroon))
+                                        `(:foreground ,(catppuccin-get-color 'maroon))
                                         :inverse t
                                         :margin 0))))
           ("PROG" .
            ((lambda (tag) (svg-tag-make "PROG"
                                         :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'teal))
+                                        `(:foreground ,(catppuccin-get-color 'teal))
                                         :inverse t
                                         :margin 0))))
           ("WAIT" .
            ((lambda (tag) (svg-tag-make "WAIT"
                                         :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'red))
+                                        `(:foreground ,(catppuccin-get-color 'red))
                                         :inverse t
                                         :margin 0))))
           ("DONE" .
            ((lambda (tag) (svg-tag-make "DONE"
                                         :face
-                                        ;;`(:foreground ,(catppuccin-get-color 'green))
+                                        `(:foreground ,(catppuccin-get-color 'green))
                                         :inverse t
                                         :margin 0))))
           ("CANC" .
            ((lambda (tag) (svg-tag-make "CANC"
                                         :face
-                                        ;;`(:foreground
-                                        ;;  ,(catppuccin-get-color 'overlay0))
+                                        `(:foreground
+                                         ,(catppuccin-get-color 'overlay0))
                                         :inverse t
                                         :margin 0)))))))
 
@@ -1512,37 +1742,34 @@
   :hook
   (org-mode . visual-fill-column-mode)
   (org-agenda-mode . visual-fill-column-mode)
+  (calendar-mode . visual-fill-column-mode)
   :custom
   (visual-fill-column-width 100)
   (visual-fill-column-center-text t))
 
-(setq eshell-rc-script (concat nox/emacs-directory "eshell/profile")
-      eshell-aliases-file (concat nox/emacs-directory "eshell/aliases")
-      eshell-history-size 5000
-      eshell-buffer-maximum-lines 5000
-      eshell-hist-ignoredups t
-      eshell-scroll-to-bottom-on-input t
-      eshell-destroy-buffer-when-process-dies t
-      eshell-visual-commands'("bash" "fish" "htop" "ssh" "top" "zsh"))
+(use-package eshell
+  :commands eshell
+  :ensure nil
+  :config
+  (setq eshell-rc-script (concat nox/emacs-directory "eshell/profile")
+        eshell-aliases-file (concat nox/emacs-directory "eshell/aliases")
+        eshell-history-size 5000
+        eshell-buffer-maximum-lines 5000
+        eshell-hist-ignoredups t
+        eshell-scroll-to-bottom-on-input t
+        eshell-destroy-buffer-when-process-dies t
+        eshell-visual-commands'("bash" "fish" "htop" "ssh" "top" "zsh"))
 
-(add-hook 'eshell-mode-hook (lambda ()
-                              (hide-mode-line-mode)))
-
-(use-package eshell-toggle
-  :commands eshell-toggle
-  :custom
-  (eshell-toggle-run-command nil)
-  (eshell-toggle-size-fraction 2))
+  (add-hook 'eshell-mode-hook (lambda ()
+                                (hide-mode-line-mode))))
 
 (use-package vterm
-  :commands (vterm vterm-toggle)
+  :commands vterm
   :hook
   (vterm-mode . (lambda () (display-line-numbers-mode -1)))
   (vterm-mode . hide-mode-line-mode)
   :custom
-  (vterm-shell "zsh -c nu"))
-
-(use-package vterm-toggle :commands vterm-toggle)
+  (vterm-shell "/run/current-system/sw/bin/zsh"))
 
 (use-package undo-fu
   :after evil

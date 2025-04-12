@@ -872,31 +872,40 @@ Visually separate UI elements for making the editing experience more pleasing.
 Function to change the colors throughout the UI when changing theme.
 #+begin_src emacs-lisp
 
+  (defun nox/diff-hl-update-colors ()
+    "Change diff-hl colors."
+    (interactive)
+
+    (set-face-attribute 'diff-hl-change nil
+                        :foreground (catppuccin-get-color 'yellow)
+                        :background (catppuccin-get-color 'base))
+    (set-face-attribute 'diff-hl-delete nil
+                        :foreground (catppuccin-get-color 'red)
+                        :background (catppuccin-get-color 'base))
+    (set-face-attribute 'diff-hl-insert nil
+                        :foreground (catppuccin-get-color 'green)
+                        :background (catppuccin-get-color 'base)))
+
   (defun nox/change-colors ()
     "Change colors throughout."
     (interactive)
 
+    (nox/diff-hl-update-colors)
+
     (set-face-attribute 'highlight nil :foreground 'unspecified)
 
-      (set-face-attribute 'calendar-today nil
-                          :underline 'unspecified
-                          :foreground (catppuccin-get-color 'green))
+    (set-face-attribute 'mode-line nil :background 'unspecified)
 
-      (set-face-attribute 'holiday nil
-                          :background 'unspecified
-                          :foreground (catppuccin-get-color 'red))
+    (set-face-attribute 'calendar-today nil
+                        :underline 'unspecified
+                        :foreground (catppuccin-get-color 'green))
 
-    (set-face-attribute 'mode-line-active nil :inherit 'mode-line)
-    (with-eval-after-load 'diff-hl
-      (set-face-attribute 'diff-hl-change nil
-                          :foreground (catppuccin-get-color 'yellow)
-                          :background (catppuccin-get-color 'base))
-      (set-face-attribute 'diff-hl-delete nil
-                          :foreground (catppuccin-get-color 'red)
-                          :background (catppuccin-get-color 'base))
-      (set-face-attribute 'diff-hl-insert nil
-                          :foreground (catppuccin-get-color 'green)
-                          :background (catppuccin-get-color 'base))))
+    (set-face-attribute 'holiday nil
+                        :background 'unspecified
+                        :foreground (catppuccin-get-color 'red))
+
+    (set-face-attribute 'mode-line-active nil :inherit 'mode-line))
+
 
 #+end_src
 
@@ -1949,7 +1958,8 @@ Binding CTRL plus +/- for zooming in/out.
 #+begin_src emacs-lisp
 
   (use-package diff-hl
-    :hook (vc-dir-mode . diff-hl-mode)
+    :hook
+    (on-first-input . global-diff-hl-mode)
     :commands
     (diff-hl-stage-current-hunk
      diff-hl-revert-hunk
@@ -1966,6 +1976,7 @@ Binding CTRL plus +/- for zooming in/out.
                                     (ignored . "i")))
     (diff-hl-show-staged-changes nil)
     :config
+    (nox/diff-hl-update-colors)
     ;; implements highlighting changes on the fly.
     (diff-hl-flydiff-mode 1)
     ;; changes the highlighting function to use the margin instead of the fringe.

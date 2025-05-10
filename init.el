@@ -1,7 +1,7 @@
 ;;; init.el --- Init -*- no-byte-compile: t; lexical-binding: t; -*-
 
 (defconst nox/emacs-directory (concat (getenv "XDG_CONFIG_HOME") "/minimal-emacs/" ))
-(defconst nox/notes-directory (concat (getenv "HOME") "/Documents/nexus/"))
+(defconst nox/notes-directory (concat (getenv "HOME") "/Documents/notes/"))
 (defconst nox/tasks-directory (concat (getenv "HOME") "/Documents/tasks/"))
 (defconst nox/schedule-file (concat nox/tasks-directory "schedule.org"))
 
@@ -144,6 +144,9 @@
 (nox/leader-keys
   "g" '(:ignore t :wk "[G]it")
   "g g" '(magit-status :wk "[G]it Status")
+  "g c" '(magit-commit-create :wk "[G]it Commit")
+  "g n" '(diff-hl-next-hunk :wk "[N]ext hunk")
+  "g p" '(diff-hl-previous-hunk :wk "[P]revious hunk")
   "g s" '(diff-hl-stage-dwim :wk "[G]it Stage Hunk"))
 
 (nox/leader-keys
@@ -370,31 +373,39 @@
 ;; Transparency
 (add-to-list 'default-frame-alist '(alpha-background . 80))
 
+(defun nox/diff-hl-update-colors ()
+  "Change diff-hl colors."
+  (interactive)
+
+  (set-face-attribute 'diff-hl-change nil
+                      :foreground (catppuccin-get-color 'yellow)
+                      :background (catppuccin-get-color 'base))
+  (set-face-attribute 'diff-hl-delete nil
+                      :foreground (catppuccin-get-color 'red)
+                      :background (catppuccin-get-color 'base))
+  (set-face-attribute 'diff-hl-insert nil
+                      :foreground (catppuccin-get-color 'green)
+                      :background (catppuccin-get-color 'base)))
+
 (defun nox/change-colors ()
   "Change colors throughout."
   (interactive)
 
   (set-face-attribute 'highlight nil :foreground 'unspecified)
 
-    (set-face-attribute 'calendar-today nil
-                        :underline 'unspecified
-                        :foreground (catppuccin-get-color 'green))
+  (set-face-attribute 'mode-line nil :background 'unspecified)
 
-    (set-face-attribute 'holiday nil
-                        :background 'unspecified
-                        :foreground (catppuccin-get-color 'red))
+  (set-face-attribute 'calendar-today nil
+                      :underline 'unspecified
+                      :foreground (catppuccin-get-color 'green))
+
+  (set-face-attribute 'holiday nil
+                      :background 'unspecified
+                      :foreground (catppuccin-get-color 'red))
 
   (set-face-attribute 'mode-line-active nil :inherit 'mode-line)
-  (with-eval-after-load 'diff-hl
-    (set-face-attribute 'diff-hl-change nil
-                        :foreground (catppuccin-get-color 'yellow)
-                        :background (catppuccin-get-color 'base))
-    (set-face-attribute 'diff-hl-delete nil
-                        :foreground (catppuccin-get-color 'red)
-                        :background (catppuccin-get-color 'base))
-    (set-face-attribute 'diff-hl-insert nil
-                        :foreground (catppuccin-get-color 'green)
-                        :background (catppuccin-get-color 'base))))
+
+  (nox/diff-hl-update-colors))
 
 (defun nox/toggle-catppuccin ()
   "Toggle the catppuccin theme between latte and mocha."
@@ -423,7 +434,10 @@
   (which-key-separator " → " ))
 
 (use-package avy
-  :commands (evil-avy-goto-char-timer nox/avy-jump-org-block nox/avy-jump-to-link)
+  :commands
+  (evil-avy-goto-char-timer
+   nox/avy-jump-org-block
+   nox/avy-jump-to-link)
   :custom
   (avy-background t)
   :config
@@ -664,6 +678,32 @@
 ;;           (:maildir "/Sent"                   :key ?s)
 ;;           (:maildir "/Folders/Wisdom Letters" :key ?w))))
 
+(use-package obsidian
+  :config
+  (global-obsidian-mode t)
+  (obsidian-backlinks-mode t)
+  :custom
+  ;; location of obsidian vault
+  (obsidian-directory "~/Documents/Notes")
+  ;; Default location for new notes from `obsidian-capture'
+  (obsidian-inbox-directory "Inbox")
+  ;; Useful if you're going to be using wiki links
+  (markdown-enable-wiki-links t)
+  (obsidian-daily-notes-directory "Logs")
+
+  ;; These bindings are only suggestions; it's okay to use other bindings
+  :bind (:map obsidian-mode-map
+              ;; Create note
+              ("C-c C-n" . obsidian-capture)
+              ;; If you prefer you can use `obsidian-insert-wikilink'
+              ("C-c C-l" . obsidian-insert-link)
+              ;; Open file pointed to by link at point
+              ("C-c C-o" . obsidian-follow-link-at-point)
+              ;; Open a different note from vault
+              ("C-c C-p" . obsidian-jump)
+              ;; Follow a backlink for the current file
+              ("C-c C-b" . obsidian-backlink-jump)))
+
 (use-package pdf-tools
   :ensure nil
   :hook
@@ -889,6 +929,12 @@
   :custom
   (flycheck-python-flake8-executable "flake8"))
 
+(use-package flycheck-rust
+  :config (add-hook 'flycheck-mode-hook #'flycheck-rust-setup))
+
+(use-package cargo
+  :hook (rust-mode . cargo-minor-mode))
+
 ;; (use-package flycheck-overlay
 ;;   :ensure
 ;;   (:host github :repo "konrad1977/flycheck-overlay")
@@ -922,6 +968,9 @@
 
 (use-package python-ts-mode
   :ensure nil :mode "\\.py\\'" :hook (python-ts-mode . eglot-ensure))
+
+(use-package rust-ts-mode
+  :ensure nil :mode "\\.rs\\'" :hook (rust-ts-mode . eglot-ensure))
 
 (use-package c-ts-mode :ensure nil :mode "\\.c\\'" :hook (c-ts-mode . eglot-ensure))
 
@@ -1125,7 +1174,8 @@
 (global-set-key (kbd "<C-wheel-down>") 'text-scale-decrease)
 
 (use-package diff-hl
-  :hook (vc-dir-mode . diff-hl-mode)
+  :hook
+  (on-first-input . global-diff-hl-mode)
   :commands
   (diff-hl-stage-current-hunk
    diff-hl-revert-hunk
@@ -1142,6 +1192,7 @@
                                   (ignored . "i")))
   (diff-hl-show-staged-changes nil)
   :config
+  (nox/diff-hl-update-colors)
   ;; implements highlighting changes on the fly.
   (diff-hl-flydiff-mode 1)
   ;; changes the highlighting function to use the margin instead of the fringe.
@@ -1394,6 +1445,7 @@
   (org-num-mode . nox/org-mode-hide-stars)
   (org-capture-mode . evil-insert-state)
   :custom
+  (org-directory nox/notes-directory)
   (org-M-RET-may-split-line nil)
   (org-startup-with-latex-preview t)
   (org-attach-id-dir "attachments/")
@@ -1410,22 +1462,30 @@
   (require 'docx-to-org)
   (nox/org-font-setup))
 
-(use-package denote
+(use-package denote-journal
+  :ensure (:host github :repo "protesilaos/denote-journal")
   :custom
-  (denote-journal-extras-title-format 'day-date-month-year)
-  :hook
-  (dired-mode . denote-dired-mode)
+  (denote-journal-title-format 'day-date-month-year)
   :config
-  (require 'denote-journal-extras)
+
+  (setq org-refile-targets
+        (mapcar (lambda (file)
+                  (cons file '(:maxlevel . 2)))
+                (directory-files-recursively org-directory "\\.org$")))
 
   (with-eval-after-load 'org-capture
     (add-to-list 'org-capture-templates
                  '("j" "Journal" entry
-                   (file denote-journal-extras-path-to-new-or-existing-entry)
+                   (file denote-journal-path-to-new-or-existing-entry)
                    "* %U %?\n%i\n%a"
                    :kill-buffer t
-                   :empty-lines 1))
+                   :empty-lines 1))))
 
+(use-package denote
+  :hook
+  (dired-mode . denote-dired-mode)
+  :config
+  (with-eval-after-load 'org-capture
     (add-to-list 'org-capture-templates
                  '("N" "New stub note (Denote)" plain
                    (file denote-last-path)
@@ -1442,16 +1502,9 @@
                    :immediate-finish nil
                    :kill-buffer t))))
 
-(use-package consult-denote
-  :after denote
-  :config
-  (consult-denote-mode))
+(use-package consult-denote :after denote :config (consult-denote-mode))
 
-;;(denote-journal-extras-path-to-new-or-existing-entry
-;;(denote-valid-date-p "2025-01-12"))
-
-(use-package denote-explore
-  :after denote)
+(use-package denote-explore :after denote)
 
 (use-package org-agenda
   :ensure nil
@@ -1573,7 +1626,7 @@
                  (function org-todoist-find-project-and-section)
                  "* TODO %^{What is the task} %^G %(progn (org-schedule nil) nil)\n%?"))
 
-  ;; (run-with-timer 60 (* 15 60) 'org-todoist-background-sync)
+  (run-with-timer 60 (* 15 60) 'org-todoist-background-sync)
   (setq org-todoist-file nox/schedule-file)
   (setq org-todoist-infer-project-for-capture nil)
   (setq org-todoist-api-token (nox/get-secret "api/todoist")))

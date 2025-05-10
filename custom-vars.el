@@ -20,7 +20,8 @@
      "a75aff58f0d5bbf230e5d1a02169ac2fbf45c930f816f3a21563304d5140d245"
      "712dda0818312c175a60d94ba676b404fc815f8c7e6c080c9b4061596c60a1db" default))
  '(safe-local-variable-values
-   '((eval add-hook 'after-save-hook 'org-todoist-sync) (org-list-indent-offset . 2))))
+   '((eval add-hook 'after-save-hook 'org-todoist-sync) (org-list-indent-offset . 2)))
+ '(warning-suppress-log-types '((auto-save))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.

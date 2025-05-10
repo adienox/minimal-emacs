@@ -5,7 +5,7 @@
 
 (add-hook 'elpaca-after-init-hook
           (lambda ()
-            (setq gc-cons-threshold (* 50 1024 1024 1024)
+            (setq gc-cons-threshold (* 64 1024 1024)
                   gc-cons-percentage 0.1)))
 
 ;;; Misc
